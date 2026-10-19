@@ -1,5 +1,4 @@
 #define CYD 1
-#define SERIAL_BAUD 2000000
 
 #define CONFIG_BT_NIMBLE_ROLE_CENTRAL_DISABLED 1
 #define CONFIG_BT_NIMBLE_ROLE_PERIPHERAL_DISABLED 1
@@ -9,6 +8,7 @@
 #define TFT_BL    21
 #define PWM_FREQ  5000
 
+#include <WiFi.h> 
 #include "cyd_includes.h"
 
 #include "theme.h"
@@ -65,7 +65,8 @@ static void pollTouch() {
 void setup() {
     Serial.begin(115200);
     delay(10);
-    Serial.println("--- SquachTester — Console Active ---");
+    WiFi.mode(WIFI_STA);
+    WiFi.disconnect();
 
     #if ESP_ARDUINO_VERSION_MAJOR >= 3
     ledcAttach(TFT_BL, PWM_FREQ, 8);
@@ -98,7 +99,6 @@ void setup() {
     uiDraw(tft);
 }
 
-// Explicit timestamp placeholder tracker allocation
 unsigned long globalLastScanTime = 0;
 
 void loop() {
@@ -108,12 +108,10 @@ void loop() {
         Emulate::update();
     }
 
-    // Standard drawing handler call rules apply cleanly now
     if (uiScreen() != Screen::SCAN_LIST && uiScreen() != Screen::SCAN_SSID_LIST && uiScreen() != Screen::CONFIG) {
-        // Base menu grid drawings continue to apply smoothly
     } else {
         uiDraw(tft);
     }
     
-    delay(10); 
+    delay(5); 
 }

@@ -172,25 +172,21 @@ void drawGrid(TFT_eSPI& t) {
         t.print(name);
     }
 
-    // COMPACT BUTTON BAR GEOMETRY
     Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
-    bar.y = h - bar.h - 4; // Keeps buttons pushed down to the absolute lowest safe limit
-    
-    // Wipe and redraw the footer divider line closely above the buttons
+    bar.y = h - bar.h - 4;
+
     t.fillRect(0, bar.y - 2, w, h - (bar.y - 2), Theme::BG);
     t.drawFastHLine(0, bar.y - 2, w, Theme::PURPLE);
 
     Theme::drawButton(t, bar.x[0], bar.y, bar.w[0], bar.h, "Config", false);
     Theme::drawButton(t, bar.x[2], bar.y, bar.w[2], bar.h, s_altMode ? "ALT" : "ALT", s_altMode);
 
-    // LINE 1: SSID line stacked tightly directly on top of the MAC address
     char txtSsid[48];
     snprintf(txtSsid, sizeof txtSsid, "SSID: %s", Emulate::getCustomSsid());
     t.setTextColor(Theme::WHITE, Theme::BG);
     t.setCursor(bar.x[1] + (bar.w[1] - t.textWidth(txtSsid)) / 2, bar.y + 4);
     t.print(txtSsid);
 
-    // LINE 2: MAC address shifted down so its base aligns with the bottom of the buttons
     char txtMac[48];
     const uint8_t* rawMac = Emulate::getTargetDeauthMac();
     snprintf(txtMac, sizeof txtMac, "MAC: %02X:%02X:%02X:%02X:%02X:%02X", 
@@ -254,19 +250,37 @@ void drawDetail(TFT_eSPI& t) {
         ly += 12;
     }
 
-    // FIXED CONDITIONAL: Resolves active tracking state mismatches so [ STOP ] handles execution correctly
     DeviceType checkType = (type == DeviceType::EVILTWIN && s_altMode) ? DeviceType::DEAUTH : type;
     const bool on = Emulate::active() && Emulate::current() == checkType;
+
+    if (checkType == DeviceType::AIRTAG && !on) {
+
+        pinMode(22, INPUT_PULLDOWN);
+        delayMicroseconds(50);
+        int hardwareDetection = digitalRead(22);
     
-    Theme::drawButton(t, emuX, emuY, emuW, emuH, on ? "[ STOP ]" : "[ EMULATE ]", on);
+        pinMode(22, OUTPUT);
+        digitalWrite(22, HIGH);
+        
+        if (hardwareDetection == HIGH) {
+            Theme::drawButton(t, emuX, emuY, emuW, emuH, "[ EMULATE ]", false);
+        } else {
+            t.fillRoundRect(emuX, emuY, emuW, emuH, 4, Theme::BG);
+            t.drawRoundRect(emuX, emuY, emuW, emuH, 4, TFT_RED);
+            t.setTextColor(TFT_RED, Theme::BG);
+            t.drawCentreString("[ UNAVAILABLE ]", emuX + (emuW / 2), emuY + (emuH / 2) - 4, 1);
+        }
+    } else {
+        Theme::drawButton(t, emuX, emuY, emuW, emuH, on ? "[ STOP ]" : "[ EMULATE ]", on);
+    }
+    
     Theme::drawButton(t, backX, backY, backW, backH, "[ BACK ]", false);
 }
 
-    // ADD THIS: Configuration choice sub-panel matrix display handler
 void drawConfigPopup(TFT_eSPI& t) {
     const int w = t.width(), h = t.height();
     int pw = w - 40; if (pw > 240) pw = 240;
-    int ph = h - 20; if (ph > 180) ph = 180; // Expanded to handle 5 items cleanly
+    int ph = h - 20; if (ph > 180) ph = 180;
     int px = (w - pw) / 2;
     int py = (h - ph) / 2;
 
@@ -276,7 +290,7 @@ void drawConfigPopup(TFT_eSPI& t) {
     Theme::drawListHeading(t, "CONFIGURATION MENU", Theme::CYAN);
 
     int btnW = pw - 30;
-    int btnH = 20; // Compact row constraints for clear screen visibility
+    int btnH = 20;
     int btnX = px + 15;
     
     int btnY1 = py + 24;
@@ -286,17 +300,11 @@ void drawConfigPopup(TFT_eSPI& t) {
     int btnY5 = btnY4 + btnH + 5;
 
     Theme::drawButton(t, btnX, btnY1, btnW, btnH, "Set SSID (Manual)", false);
-    Theme::drawButton(t, btnX, btnY2, btnW, btnH, "Select SSID (Live Scan)", false); // NEW BUTTON
+    Theme::drawButton(t, btnX, btnY2, btnW, btnH, "Select SSID (Live Scan)", false);
     Theme::drawButton(t, btnX, btnY3, btnW, btnH, "Set MAC (Manual)", false);
     Theme::drawButton(t, btnX, btnY4, btnW, btnH, "Select MAC (Live Scan)", false);
     Theme::drawButton(t, btnX, btnY5, btnW, btnH, "[ CLOSE ]", false);
 }
-
-// NEW FUNCTION: Renders up to 8 live networks tracked in the proximity maps
-// Global navigation and selection index trackers
-//static int s_scannedCount = 0;
-//static int s_scrollOffset = 0;
-//static int s_selectedIndex = -1;
 
 void drawScanList(TFT_eSPI& t) {
     const int w = t.width(), h = t.height();
@@ -304,16 +312,14 @@ void drawScanList(TFT_eSPI& t) {
     Theme::drawListHeading(t, "SELECT TARGET NETWORK MAC", Theme::AMBER);
 
     t.setTextFont(1);
-    
-    // Renders a maximum window allocation of 6 items on screen at once
+
     for (int i = 0; i < 6; i++) {
         int itemIndex = s_scrollOffset + i;
-        if (itemIndex >= s_scannedCount) break; // End of list bounded cleanly
+        if (itemIndex >= s_scannedCount) break;
 
         int y = 24 + i * 22;
         bool isSelected = (itemIndex == s_selectedIndex);
 
-        // Highlight selected target node line
         if (isSelected) {
             t.fillRect(0, y, w, 20, Theme::PURPLE);
         }
@@ -328,7 +334,6 @@ void drawScanList(TFT_eSPI& t) {
         t.print(Emulate::getScannedMacStr(itemIndex));
     }
 
-    // DRAW THE BUTTON BARS MATRIX AT THE BOTTOM CAP PAGE BOUNDS
     int btnW = (w - 18) / 2;
     int btnH = 24;
     int btnY = h - btnH - 6;
@@ -338,7 +343,6 @@ void drawScanList(TFT_eSPI& t) {
     Theme::drawButton(t, leftBtnX, btnY, btnW, btnH, "[ BACK ]", false);
     Theme::drawButton(t, rightBtnX, btnY, btnW, btnH, "[ CONFIRM ]", s_selectedIndex != -1);
 
-    // Render navigation hint indicators if more networks exist beyond boundaries
     if (s_scrollOffset > 0) {
         t.setTextColor(Theme::AMBER, Theme::BG);
         t.setCursor(w / 2 - 4, 16); t.print("^");
@@ -354,8 +358,7 @@ void drawScanSsidList(TFT_eSPI& t) {
     Theme::drawListHeading(t, "SELECT TARGET NETWORK SSID", Theme::CYAN);
 
     t.setTextFont(1);
-    
-    // Renders up to 6 targets at a time with scroll offset rules applied
+
     for (int i = 0; i < 6; i++) {
         int itemIndex = s_scrollOffset + i;
         if (itemIndex >= s_scannedCount) break;
@@ -405,16 +408,12 @@ void uiInit(TFT_eSPI& t) {
 void uiDraw(TFT_eSPI& t) {
     if (!s_dirty) return;
     s_dirty = false;
-    
-    // SAFE LAYOUT MATRIX ROUTING: 
-    // Isolates each individual screen state inside its own distinct condition branch block.
-    // This completely prevents the canvas from wiping and drawing the background menu 
-    // grid while you are actively navigating configurations or scanning networks.
+
     if (s_screen == Screen::KEYBOARD) {
         drawKeyboard(t);
     } 
     else if (s_screen == Screen::SCAN_LIST) {
-        drawScanList(t); // Renders the scrollable MAC target engine list cleanly
+        drawScanList(t);
     } 
     else if (s_screen == Screen::CONFIG) {
         t.fillScreen(Theme::BG);
@@ -423,7 +422,7 @@ void uiDraw(TFT_eSPI& t) {
         drawConfigPopup(t); 
     } 
     else if (s_screen == Screen::SCAN_SSID_LIST) {
-        drawScanSsidList(t); // <-- ADD THIS SPECIFIC REDRAW MAPPING ROW
+        drawScanSsidList(t);
     }
     else if (s_screen == Screen::GRID) {
         t.fillScreen(Theme::BG);
@@ -526,7 +525,6 @@ void uiHandleTap(TFT_eSPI& t, int x, int y) {
         int btnY4 = btnY3 + btnH + 5;
         int btnY5 = btnY4 + btnH + 5;
 
-        // Button 1: Set SSID Manual
         if (x >= btnX && x <= btnX + btnW && y >= btnY1 && y <= btnY1 + btnH) {
             s_lastKbCallerIsMac = false;
             s_screen = Screen::KEYBOARD;
@@ -535,7 +533,7 @@ void uiHandleTap(TFT_eSPI& t, int x, int y) {
             s_dirty = true;
             return;
         }
-        // Button 2: Select SSID Live Scan (NEW INTERCEPT)
+
         if (x >= btnX && x <= btnX + btnW && y >= btnY2 && y <= btnY2 + btnH) {
             t.fillRect(0, 0, w, h, Theme::BG);
             Theme::drawListHeading(t, "SCANNING... PLEASE WAIT", Theme::CYAN);
@@ -551,7 +549,7 @@ void uiHandleTap(TFT_eSPI& t, int x, int y) {
             s_dirty = true;
             return;
         }
-        // Button 3: Set MAC Manual
+
         if (x >= btnX && x <= btnX + btnW && y >= btnY3 && y <= btnY3 + btnH) {
             s_lastKbCallerIsMac = true;
             s_screen = Screen::KEYBOARD;
@@ -560,7 +558,7 @@ void uiHandleTap(TFT_eSPI& t, int x, int y) {
             s_dirty = true;
             return;
         }
-        // Button 4: Select MAC Live Scan
+
         if (x >= btnX && x <= btnX + btnW && y >= btnY4 && y <= btnY4 + btnH) {
             t.fillRect(0, 0, w, h, Theme::BG);
             Theme::drawListHeading(t, "SCANNING... PLEASE WAIT", Theme::AMBER);
@@ -576,7 +574,7 @@ void uiHandleTap(TFT_eSPI& t, int x, int y) {
             s_dirty = true;
             return;
         }
-        // Button 5: Close Menu
+
         if (x >= btnX && x <= btnX + btnW && y >= btnY5 && y <= btnY5 + btnH) {
             s_screen = Screen::GRID;
             s_dirty = true;
@@ -585,7 +583,6 @@ void uiHandleTap(TFT_eSPI& t, int x, int y) {
         return;
     }
 
-    // NEW BLOCK: Tracks gesture selections on the auto-SSID list canvas layer
     if (s_screen == Screen::SCAN_SSID_LIST) {
         int btnW = (w - 18) / 2;
         int btnH = 24;
@@ -599,7 +596,6 @@ void uiHandleTap(TFT_eSPI& t, int x, int y) {
             }
             if (x >= 6 + btnW + 6 && x <= w - 6) {
                 if (s_selectedIndex >= 0 && s_selectedIndex < s_scannedCount) {
-                    // Locks chosen name parameter down to the target configurations
                     Emulate::setCustomSsid(Emulate::getScannedSsidStr(s_selectedIndex));
                 }
                 s_screen = Screen::GRID; 
@@ -691,14 +687,29 @@ void uiHandleTap(TFT_eSPI& t, int x, int y) {
         detailGeom(w, h, px, py, pw, ph, emuX, emuY, emuW, emuH, backX, backY, backW, backH);
         const DeviceType type = typeAt((uint8_t)s_openCell);
         
-        // FIXED ACTION INTERCEPT MAPPING
         DeviceType checkType = (type == DeviceType::EVILTWIN && s_altMode) ? DeviceType::DEAUTH : type;
 
         if (x >= emuX && x <= emuX + emuW && y >= emuY && y <= emuY + emuH) {
             if (Emulate::active() && Emulate::current() == checkType) {
-                Emulate::stop(); // Safely executes the stop command sequence now!
+                Emulate::stop();
             } else {
-                Emulate::start(checkType); // Launches the true selected tool profile               
+                if (checkType == DeviceType::AIRTAG) {
+                    pinMode(22, INPUT_PULLDOWN);
+                    delayMicroseconds(50);
+                    int hardwareDetection = digitalRead(22);
+                    
+                    pinMode(22, OUTPUT);
+                    digitalWrite(22, HIGH);
+                    
+                    if (hardwareDetection == HIGH) {
+                        Emulate::start(checkType);
+                    } else {
+                        Serial.println("[BLOCKED] Touch action ignored. AirTag module is missing.");
+                        return;
+                    }
+                } else {
+                    Emulate::start(checkType);
+                }              
             }
             s_dirty = true;
             return;

