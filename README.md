@@ -131,7 +131,7 @@ The core application firmware drives an adaptive touchscreen grid layout support
 | **META** | `GLASS` | Master ESP32 | *None (Standalone)* | Emulates smart camera glasses BLE discovery frames. |
 | **SKIMMER** | `SKIM` | Master ESP32 | *None (Standalone)* | Replicates legacy card reader exfiltration patterns. |
 | **RAVEN** | `RAV` | Master ESP32 | *None (Standalone)* | Simulates rooftop gun-shot detector beacon outputs. |
-| **AIRTAG** | `TRACKER` | External Unit | 🔴 **Requires Optional nRF52** | **Will NOT work without external co-processor hardware.** |
+| **AIRTAG** | `TRACKER` | External Unit | 🔴 **Requires Optional nRF52** | **Emulates an AirTag *May not be needed*.** |
 | **DRONE** | `DRONE` | Master ESP32 | *None (Standalone)* | Evaluates compliance of FAA standard Remote ID pings. |
 | **SAMSUNG** | `STAG` | Master ESP32 | *None (Standalone)* | Simulates item locator maps on Galaxy SmartTag protocols. |
 | **GOOGLE** | `GTAG` | Master ESP32 | *None (Standalone)* | Evaluates generic tracker arrays inside Android networks. |
