@@ -1,8 +1,8 @@
 # 🎛️ SquachTester — Cheap Yellow Display (CYD) Edition
 
-[![Platform: ESP32](https://img.shields.io/badge/wiki-documentation-forestgreen)
-[![Co-Processor: nRF52](https://shields.io)](https://nordicsemi.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Platform: ESP32](https://img.shields.io/badge/wiki-documentation-forestgreen)
+![Co-Processor: nRF52](https://shields.io)](https://nordicsemi.com)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Welcome to **SquachTester**, a multi-protocol simulation, wireless telemetry evaluation, and hardware validation suite designed specifically for the **2.8" Cheap Yellow Display (CYD)** (ESP32-2432S028R). 
 
