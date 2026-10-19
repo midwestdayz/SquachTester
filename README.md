@@ -159,3 +159,7 @@ When selecting the `AIRTAG` menu item on the control screen, the master display 
 1. Configure your target board settings in `config.h` (e.g., driver type and pin setups).
 2. Open `SquachTester.ino` and target the **ESP32 Dev Module** parameters.
 3. Compile and flash the payload to your board.
+
+### Devices Used in the creation
+1. **2.8" Cheap Yellow Display (CYD)** (ESP32-2432S028) with the P3 and CN1 connectors on the right side of the BLE module.
+2. nRF52840 ProMicro with v1940 silkscreened near the USB-C connector.
