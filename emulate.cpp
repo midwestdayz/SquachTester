@@ -1,3 +1,4 @@
+#include "config.h" // Access centralized user configurations
 #include <WiFi.h>           
 #include <Arduino.h>
 #include <SPI.h>
@@ -113,25 +114,27 @@ void startBleNameRaw(const char* devName) {
     publishRaw(payload, idx);
 }
 
-// Inject the core Espressif radio controller definitions needed to force private address compliance
 #include "esp_gap_ble_api.h"
 
 void startAirTagTrigger() {
     stopWifi();
     stopBle();
     
-    pinMode(22, OUTPUT);
-    digitalWrite(22, LOW);
+    // CORRECTION: Uses AIRTAG_NRF_CS_PIN (Pin 5) dynamically as defined in config.h
+    pinMode(AIRTAG_NRF_CS_PIN, OUTPUT);
+    digitalWrite(AIRTAG_NRF_CS_PIN, LOW);
     delay(5);
     
-    pinMode(22, INPUT_PULLDOWN);
+    pinMode(AIRTAG_NRF_CS_PIN, INPUT_PULLDOWN);
     delay(5); 
-    int hardwareDetection = digitalRead(22);
+    int hardwareDetection = digitalRead(AIRTAG_NRF_CS_PIN);
     
     if (hardwareDetection == HIGH) {
-        Serial.println("[ACTIVE] AIRTAG Tracking Engine Live -> Co-Processor Connected. Hardware Pin 22 Tripped Low.");
-        pinMode(22, OUTPUT);
-        digitalWrite(22, LOW); 
+        Serial.print("[ACTIVE] AIRTAG Tracking Engine Live -> Co-Processor Connected. Hardware Pin ");
+        Serial.print(AIRTAG_NRF_CS_PIN);
+        Serial.println(" Tripped Low.");
+        pinMode(AIRTAG_NRF_CS_PIN, OUTPUT);
+        digitalWrite(AIRTAG_NRF_CS_PIN, LOW); 
     }
 }
 
@@ -232,7 +235,7 @@ int scanNetworksInternal() {
     return s_totalDiscovered;
 }
 
-}  // namespace
+}
 
 int scanNetworks() { return scanNetworksInternal(); }
 const char* getScannedMacStr(int index) { return (index >= 0 && index < s_totalDiscovered) ? s_scanMacsStr[index] : "00:00:00:00:00:00"; }
@@ -248,13 +251,8 @@ void setTargetMacFromScan(int index) {
 void begin() {
     esp_log_level_set("*", ESP_LOG_NONE);
     Serial.begin(115200);
-    
-    // HARDWARE SETTLING DELAY:
-    // Gives the USB port and the serial buffer 500ms to fully open and catch up,
-    // ensuring no text lines get swallowed or dropped!
     delay(500); 
-    
-    // THE FULL UNBROKEN GREETING BANNER:
+
     Serial.println("=========================================");
     Serial.println("     SQUACH TESTER SYSTEM ONLINE        ");
     Serial.println("=========================================");
@@ -262,15 +260,19 @@ void begin() {
 
     s_bleOk = false;
     s_on = false;
-    pinMode(22, OUTPUT);
-    digitalWrite(22, HIGH);
+    
+    // CORRECTION: Disarms the designated CS line correctly on boot setup
+    pinMode(AIRTAG_NRF_CS_PIN, OUTPUT);
+    digitalWrite(AIRTAG_NRF_CS_PIN, HIGH);
 }
 
 void stop() {
     stopBle();
     stopWifi();
-    pinMode(22, OUTPUT);
-    digitalWrite(22, HIGH);
+    
+    // CORRECTION: Forces the designated CS trigger high to disarm cleanly
+    pinMode(AIRTAG_NRF_CS_PIN, OUTPUT);
+    digitalWrite(AIRTAG_NRF_CS_PIN, HIGH);
     
     if (s_on) {
         Serial.println("[DE-ACTIVE] Feature Stopped -> Hardware Channels Disarmed Safely.");
@@ -334,7 +336,7 @@ bool start(DeviceType t) {
             startBleUuid16Raw(0x3100, "Raven"); 
             break;
         case DeviceType::AIRTAG:
-            startAirTagTrigger(); // The custom messages are now handled dynamically inside this function!
+            startAirTagTrigger();
             break;
         case DeviceType::DRONE:
             Serial.println("[ACTIVE] DRONE Remote ID Profile Live -> Broadcasting Drone Telemetry.");
@@ -390,4 +392,4 @@ bool start(DeviceType t) {
 bool active() { return s_on; }
 DeviceType current() { return s_cur; }
 
-}  // namespace Emulate
+} // namespace Emulate

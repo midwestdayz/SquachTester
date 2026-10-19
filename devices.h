@@ -18,11 +18,11 @@ enum class DeviceType : uint8_t {
     IBEACON,
     HACKER,
     EVILTWIN,
-    DEAUTH,
+    DEAUTH, 
     COUNT
 };
 
-static const uint8_t kGridCells = 16;
+static const uint8_t kGridCells = 17; // Updated from 16 to 17 to accommodate DEAUTH
 
 inline const char* deviceName(DeviceType t) {
     switch (t) {
@@ -42,6 +42,7 @@ inline const char* deviceName(DeviceType t) {
         case DeviceType::IBEACON:     return "IBEACON";
         case DeviceType::HACKER:      return "HACKER";
         case DeviceType::EVILTWIN:    return "TWIN";
+        case DeviceType::DEAUTH:      return "DEAUTH"; 
         default:                      return "?";
     }
 }
@@ -64,6 +65,7 @@ inline const char* shortName(DeviceType t) {
         case DeviceType::IBEACON:     return "BEACON";
         case DeviceType::HACKER:      return "HACK";
         case DeviceType::EVILTWIN:    return "TWIN";
+        case DeviceType::DEAUTH:      return "JAM"; 
         default:                      return "?";
     }
 }
@@ -74,6 +76,7 @@ inline DeviceType typeAt(uint8_t i) {
         DeviceType::RAVEN, DeviceType::AIRTAG, DeviceType::DRONE, DeviceType::ALPR,
         DeviceType::CAMERA, DeviceType::SAMSUNG_TAG, DeviceType::GOOGLE_TAG, DeviceType::TILE,
         DeviceType::RING, DeviceType::IBEACON, DeviceType::HACKER, DeviceType::EVILTWIN,
+        DeviceType::DEAUTH 
     };
     return i < kGridCells ? card[i] : DeviceType::FLOCK;
 }

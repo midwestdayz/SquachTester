@@ -1,3 +1,4 @@
+#include "config.h" // Access centralized user configurations
 #include <SPI.h>
 #include <TFT_eSPI.h>
 #include "ui.h"
@@ -11,6 +12,7 @@ int s_scannedCount = 0;
 int s_scrollOffset = 0;
 int s_selectedIndex = -1;
 bool s_lastKbCallerIsMac = false;
+
 namespace {
 
     Screen     s_screen   = Screen::GRID;
@@ -130,72 +132,72 @@ namespace {
             t.print(actions[i]);
         }
     }
+    void drawGrid(TFT_eSPI& t) {
+        const int w = t.width(), h = t.height();
+        int gx, gy, cw, ch;
+        geom(w, h, gx, gy, cw, ch);
 
-void drawGrid(TFT_eSPI& t) {
-    const int w = t.width(), h = t.height();
-    int gx, gy, cw, ch;
-    geom(w, h, gx, gy, cw, ch);
+        const bool live = Emulate::active();
+        char head[40];
+        if (live)
+            snprintf(head, sizeof head, "LIVE: %s", shortName(Emulate::current()));
+        else
+            snprintf(head, sizeof head, "TAP A TARGET TO BROADCAST");
+        Theme::drawListHeading(t, head, live ? Theme::AMBER : Theme::CYAN);
 
-    const bool live = Emulate::active();
-    char head[40];
-    if (live)
-        snprintf(head, sizeof head, "LIVE: %s", shortName(Emulate::current()));
-    else
-        snprintf(head, sizeof head, "TAP A TARGET TO BROADCAST");
-    Theme::drawListHeading(t, head, live ? Theme::AMBER : Theme::CYAN);
+        t.setTextFont(1); 
+        for (uint8_t i = 0; i < kGridCells; i++) {
+            const int x = gx + (i % 4) * (cw + 4);
+            const int y = gy + (i / 4) * (ch + 4);
+            DeviceType type = typeAt(i);
+            
+            DeviceType checkType = (type == DeviceType::EVILTWIN && s_altMode) ? DeviceType::DEAUTH : type;
+            bool on = live && Emulate::current() == checkType;
 
-    t.setTextFont(1); 
-    for (uint8_t i = 0; i < kGridCells; i++) {
-        const int x = gx + (i % 4) * (cw + 4);
-        const int y = gy + (i / 4) * (ch + 4);
-        DeviceType type = typeAt(i);
+            const char* name = shortName(type);
+            if (type == DeviceType::EVILTWIN && s_altMode) {
+                name = "DEAUTH"; 
+            }
+
+            uint16_t edge = on ? Theme::AMBER : Theme::PURPLE;
+            t.fillRect(x, y, cw, ch, Theme::BG);
+            t.drawRect(x, y, cw, ch, edge);
+
+            // CORRECTION: Keep 'type' tracking here so DEAUTH switches properly on the display grid 
+            const int s = (cw < ch ? cw : ch) / 2 - 5;
+            if (s >= 4) {
+                drawTypeIcon(t, type, x + cw / 2, y + ch / 2 - 4, s);
+            }
+
+            t.setTextColor(on ? Theme::AMBER : Theme::WHITE, Theme::BG);
+            t.setCursor(x + (cw - t.textWidth(name)) / 2, y + ch - t.fontHeight() - 2);
+            t.print(name);
+        }
+
+        Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
+        bar.y = h - bar.h - 4;
+
+        t.fillRect(0, bar.y - 2, w, h - (bar.y - 2), Theme::BG);
+        t.drawFastHLine(0, bar.y - 2, w, Theme::PURPLE);
+
+        Theme::drawButton(t, bar.x[0], bar.y, bar.w[0], bar.h, "Config", false);
+        Theme::drawButton(t, bar.x[2], bar.y, bar.w[2], bar.h, "ALT", s_altMode);
+
+        char txtSsid[48];
+        snprintf(txtSsid, sizeof txtSsid, "SSID: %s", Emulate::getCustomSsid());
+        t.setTextColor(Theme::WHITE, Theme::BG);
+        t.setCursor(bar.x[1] + (bar.w[1] - t.textWidth(txtSsid)) / 2, bar.y + 4);
+        t.print(txtSsid);
+
+        char txtMac[48];
+        const uint8_t* rawMac = Emulate::getTargetDeauthMac();
+        snprintf(txtMac, sizeof txtMac, "MAC: %02X:%02X:%02X:%02X:%02X:%02X", 
+                 rawMac[0], rawMac[1], rawMac[2], rawMac[3], rawMac[4], rawMac[5]);
         
-        DeviceType checkType = (type == DeviceType::EVILTWIN && s_altMode) ? DeviceType::DEAUTH : type;
-        bool on = live && Emulate::current() == checkType;
-
-        const char* name = shortName(type);
-        if (type == DeviceType::EVILTWIN && s_altMode) {
-            name = "DEAUTH"; 
-        }
-
-        uint16_t edge = on ? Theme::AMBER : Theme::PURPLE;
-        t.fillRect(x, y, cw, ch, Theme::BG);
-        t.drawRect(x, y, cw, ch, edge);
-
-        const int s = (cw < ch ? cw : ch) / 2 - 5;
-        if (s >= 4) {
-            drawTypeIcon(t, type, x + cw / 2, y + ch / 2 - 4, s);
-        }
-
-        t.setTextColor(on ? Theme::AMBER : Theme::WHITE, Theme::BG);
-        t.setCursor(x + (cw - t.textWidth(name)) / 2, y + ch - t.fontHeight() - 2);
-        t.print(name);
+        t.setTextColor(Theme::AMBER, Theme::BG);
+        t.setCursor(bar.x[1] + (bar.w[1] - t.textWidth(txtMac)) / 2, bar.y + 14);
+        t.print(txtMac);
     }
-
-    Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
-    bar.y = h - bar.h - 4;
-
-    t.fillRect(0, bar.y - 2, w, h - (bar.y - 2), Theme::BG);
-    t.drawFastHLine(0, bar.y - 2, w, Theme::PURPLE);
-
-    Theme::drawButton(t, bar.x[0], bar.y, bar.w[0], bar.h, "Config", false);
-    Theme::drawButton(t, bar.x[2], bar.y, bar.w[2], bar.h, s_altMode ? "ALT" : "ALT", s_altMode);
-
-    char txtSsid[48];
-    snprintf(txtSsid, sizeof txtSsid, "SSID: %s", Emulate::getCustomSsid());
-    t.setTextColor(Theme::WHITE, Theme::BG);
-    t.setCursor(bar.x[1] + (bar.w[1] - t.textWidth(txtSsid)) / 2, bar.y + 4);
-    t.print(txtSsid);
-
-    char txtMac[48];
-    const uint8_t* rawMac = Emulate::getTargetDeauthMac();
-    snprintf(txtMac, sizeof txtMac, "MAC: %02X:%02X:%02X:%02X:%02X:%02X", 
-             rawMac[0], rawMac[1], rawMac[2], rawMac[3], rawMac[4], rawMac[5]);
-    
-    t.setTextColor(Theme::AMBER, Theme::BG);
-    t.setCursor(bar.x[1] + (bar.w[1] - t.textWidth(txtMac)) / 2, bar.y + 14);
-    t.print(txtMac);
-}
 
     void detailGeom(int screenW, int screenH,
     int& px, int& py, int& pw, int& ph,
@@ -216,186 +218,180 @@ void drawGrid(TFT_eSPI& t) {
         emuW  = pw - 2 * margin;
     }
 
-void drawDetail(TFT_eSPI& t) {
-    const int w = t.width(), h = t.height();
-    int px, py, pw, ph, emuX, emuY, emuW, emuH, backX, backY, backW, backH;
-    detailGeom(w, h, px, py, pw, ph, emuX, emuY, emuW, emuH, backX, backY, backW, backH);
+    void drawDetail(TFT_eSPI& t) {
+        const int w = t.width(), h = t.height();
+        int px, py, pw, ph, emuX, emuY, emuW, emuH, backX, backY, backW, backH;
+        detailGeom(w, h, px, py, pw, ph, emuX, emuY, emuW, emuH, backX, backY, backW, backH);
 
-    const DeviceType type = typeAt((uint8_t)s_openCell);
-    t.fillRoundRect(px, py, pw, ph, 6, Theme::BG);
-    t.drawRoundRect(px, py, pw, ph, 6, Theme::PURPLE);
+        const DeviceType type = typeAt((uint8_t)s_openCell);
+        t.fillRoundRect(px, py, pw, ph, 6, Theme::BG);
+        t.drawRoundRect(px, py, pw, ph, 6, Theme::PURPLE);
 
-    drawTypeIcon(t, type, px + 28, py + 28, 18);
-    t.setTextColor(Theme::CYAN, Theme::BG);
-    t.setCursor(px + 52, py + 12);
-    
-    t.setTextFont(1);
-    if (type == DeviceType::EVILTWIN && s_altMode) {
-        t.print("DEAUTH EMULATOR");
-    } else {
-        t.print(deviceName(type));
-    }
-    
-    t.setTextColor(Theme::WHITE, Theme::BG);
-    char lines[8][48];
-    
-    const char* explainStr = (type == DeviceType::EVILTWIN && s_altMode) ? 
-        "Broadcasts automated validation sequences intended to analyze local validation layer triggers." : deviceExplain(type);
-
-    const uint8_t n = Theme::wrapText(t, explainStr, pw - 20, lines, 8);
-    int ly = py + 48;
-    for (uint8_t i = 0; i < n && ly + 12 < emuY - 4; i++) {
-        t.setCursor(px + 10, ly);
-        t.print(lines[i]);
-        ly += 12;
-    }
-
-    DeviceType checkType = (type == DeviceType::EVILTWIN && s_altMode) ? DeviceType::DEAUTH : type;
-    const bool on = Emulate::active() && Emulate::current() == checkType;
-
-    if (checkType == DeviceType::AIRTAG && !on) {
-
-        pinMode(22, INPUT_PULLDOWN);
-        delayMicroseconds(50);
-        int hardwareDetection = digitalRead(22);
-    
-        pinMode(22, OUTPUT);
-        digitalWrite(22, HIGH);
+        DeviceType checkType = (type == DeviceType::EVILTWIN && s_altMode) ? DeviceType::DEAUTH : type;
+        drawTypeIcon(t, checkType, px + 28, py + 28, 18);
+        t.setTextColor(Theme::CYAN, Theme::BG);
+        t.setCursor(px + 52, py + 12);
         
-        if (hardwareDetection == HIGH) {
-            Theme::drawButton(t, emuX, emuY, emuW, emuH, "[ EMULATE ]", false);
+        t.setTextFont(1);
+        t.print(deviceName(checkType));
+        
+        t.setTextColor(Theme::WHITE, Theme::BG);
+        char lines[8][48];
+        const char* explainStr = deviceExplain(checkType);
+
+        const uint8_t n = Theme::wrapText(t, explainStr, pw - 20, lines, 8);
+        int ly = py + 48;
+        for (uint8_t i = 0; i < n && ly + 12 < emuY - 4; i++) {
+            t.setCursor(px + 10, ly);
+            t.print(lines[i]);
+            ly += 12;
+        }
+
+        const bool on = Emulate::active() && Emulate::current() == checkType;
+
+        if (checkType == DeviceType::AIRTAG && !on) {
+            // CORRECTION: Query AIRTAG_NRF_CS_PIN dynamically out of config.h
+            pinMode(AIRTAG_NRF_CS_PIN, INPUT_PULLDOWN);
+            delayMicroseconds(50);
+            int hardwareDetection = digitalRead(AIRTAG_NRF_CS_PIN);
+        
+            pinMode(AIRTAG_NRF_CS_PIN, OUTPUT);
+            digitalWrite(AIRTAG_NRF_CS_PIN, HIGH);
+            
+            if (hardwareDetection == HIGH) {
+                Theme::drawButton(t, emuX, emuY, emuW, emuH, "[ EMULATE ]", false);
+            } else {
+                t.fillRoundRect(emuX, emuY, emuW, emuH, 4, Theme::BG);
+                t.drawRoundRect(emuX, emuY, emuW, emuH, 4, TFT_RED);
+                t.setTextColor(TFT_RED, Theme::BG);
+                t.drawCentreString("[ UNAVAILABLE ]", emuX + (emuW / 2), emuY + (emuH / 2) - 4, 1);
+            }
         } else {
-            t.fillRoundRect(emuX, emuY, emuW, emuH, 4, Theme::BG);
-            t.drawRoundRect(emuX, emuY, emuW, emuH, 4, TFT_RED);
-            t.setTextColor(TFT_RED, Theme::BG);
-            t.drawCentreString("[ UNAVAILABLE ]", emuX + (emuW / 2), emuY + (emuH / 2) - 4, 1);
+            Theme::drawButton(t, emuX, emuY, emuW, emuH, on ? "[ STOP ]" : "[ EMULATE ]", on);
         }
-    } else {
-        Theme::drawButton(t, emuX, emuY, emuW, emuH, on ? "[ STOP ]" : "[ EMULATE ]", on);
-    }
-    
-    Theme::drawButton(t, backX, backY, backW, backH, "[ BACK ]", false);
-}
-
-void drawConfigPopup(TFT_eSPI& t) {
-    const int w = t.width(), h = t.height();
-    int pw = w - 40; if (pw > 240) pw = 240;
-    int ph = h - 20; if (ph > 180) ph = 180;
-    int px = (w - pw) / 2;
-    int py = (h - ph) / 2;
-
-    t.fillRoundRect(px, py, pw, ph, 6, Theme::BG);
-    t.drawRoundRect(px, py, pw, ph, 6, Theme::PURPLE);
-
-    Theme::drawListHeading(t, "CONFIGURATION MENU", Theme::CYAN);
-
-    int btnW = pw - 30;
-    int btnH = 20;
-    int btnX = px + 15;
-    
-    int btnY1 = py + 24;
-    int btnY2 = btnY1 + btnH + 5;
-    int btnY3 = btnY2 + btnH + 5;
-    int btnY4 = btnY3 + btnH + 5;
-    int btnY5 = btnY4 + btnH + 5;
-
-    Theme::drawButton(t, btnX, btnY1, btnW, btnH, "Set SSID (Manual)", false);
-    Theme::drawButton(t, btnX, btnY2, btnW, btnH, "Select SSID (Live Scan)", false);
-    Theme::drawButton(t, btnX, btnY3, btnW, btnH, "Set MAC (Manual)", false);
-    Theme::drawButton(t, btnX, btnY4, btnW, btnH, "Select MAC (Live Scan)", false);
-    Theme::drawButton(t, btnX, btnY5, btnW, btnH, "[ CLOSE ]", false);
-}
-
-void drawScanList(TFT_eSPI& t) {
-    const int w = t.width(), h = t.height();
-    t.fillRect(0, 0, w, h, Theme::BG);
-    Theme::drawListHeading(t, "SELECT TARGET NETWORK MAC", Theme::AMBER);
-
-    t.setTextFont(1);
-
-    for (int i = 0; i < 6; i++) {
-        int itemIndex = s_scrollOffset + i;
-        if (itemIndex >= s_scannedCount) break;
-
-        int y = 24 + i * 22;
-        bool isSelected = (itemIndex == s_selectedIndex);
-
-        if (isSelected) {
-            t.fillRect(0, y, w, 20, Theme::PURPLE);
-        }
-        t.drawFastHLine(0, y + 20, w, isSelected ? Theme::AMBER : Theme::BG);
         
-        t.setTextColor(isSelected ? Theme::AMBER : Theme::CYAN, isSelected ? Theme::PURPLE : Theme::BG);
-        t.setCursor(6, y + 4);
-        t.print(Emulate::getScannedSsidStr(itemIndex));
-
-        t.setTextColor(isSelected ? Theme::WHITE : Theme::WHITE, isSelected ? Theme::PURPLE : Theme::BG);
-        t.setCursor(w - t.textWidth("00:00:00:00:00:00") - 6, y + 4);
-        t.print(Emulate::getScannedMacStr(itemIndex));
+        Theme::drawButton(t, backX, backY, backW, backH, "[ BACK ]", false);
     }
+    void drawConfigPopup(TFT_eSPI& t) {
+        const int w = t.width(), h = t.height();
+        int pw = w - 40; if (pw > 240) pw = 240;
+        int ph = h - 20; if (ph > 180) ph = 180;
+        int px = (w - pw) / 2;
+        int py = (h - ph) / 2;
 
-    int btnW = (w - 18) / 2;
-    int btnH = 24;
-    int btnY = h - btnH - 6;
-    int leftBtnX = 6;
-    int rightBtnX = leftBtnX + btnW + 6;
+        t.fillRoundRect(px, py, pw, ph, 6, Theme::BG);
+        t.drawRoundRect(px, py, pw, ph, 6, Theme::PURPLE);
 
-    Theme::drawButton(t, leftBtnX, btnY, btnW, btnH, "[ BACK ]", false);
-    Theme::drawButton(t, rightBtnX, btnY, btnW, btnH, "[ CONFIRM ]", s_selectedIndex != -1);
+        Theme::drawListHeading(t, "CONFIGURATION MENU", Theme::CYAN);
 
-    if (s_scrollOffset > 0) {
-        t.setTextColor(Theme::AMBER, Theme::BG);
-        t.setCursor(w / 2 - 4, 16); t.print("^");
-    }
-    if (s_scrollOffset + 6 < s_scannedCount) {
-        t.setTextColor(Theme::AMBER, Theme::BG);
-        t.setCursor(w / 2 - 4, btnY - 12); t.print("v");
-    }
-}
-void drawScanSsidList(TFT_eSPI& t) {
-    const int w = t.width(), h = t.height();
-    t.fillRect(0, 0, w, h, Theme::BG);
-    Theme::drawListHeading(t, "SELECT TARGET NETWORK SSID", Theme::CYAN);
-
-    t.setTextFont(1);
-
-    for (int i = 0; i < 6; i++) {
-        int itemIndex = s_scrollOffset + i;
-        if (itemIndex >= s_scannedCount) break;
-
-        int y = 24 + i * 22;
-        bool isSelected = (itemIndex == s_selectedIndex);
-
-        if (isSelected) {
-            t.fillRect(0, y, w, 20, Theme::PURPLE);
-        }
-        t.drawFastHLine(0, y + 20, w, isSelected ? Theme::AMBER : Theme::BG);
+        int btnW = pw - 30;
+        int btnH = 20;
+        int btnX = px + 15;
         
-        t.setTextColor(isSelected ? Theme::AMBER : Theme::WHITE, isSelected ? Theme::PURPLE : Theme::BG);
-        t.setCursor(12, y + 4);
-        t.print(Emulate::getScannedSsidStr(itemIndex));
+        int btnY1 = py + 24;
+        int btnY2 = btnY1 + btnH + 5;
+        int btnY3 = btnY2 + btnH + 5;
+        int btnY4 = btnY3 + btnH + 5;
+        int btnY5 = btnY4 + btnH + 5;
+
+        Theme::drawButton(t, btnX, btnY1, btnW, btnH, "Set SSID (Manual)", false);
+        Theme::drawButton(t, btnX, btnY2, btnW, btnH, "Select SSID (Live Scan)", false);
+        Theme::drawButton(t, btnX, btnY3, btnW, btnH, "Set MAC (Manual)", false);
+        Theme::drawButton(t, btnX, btnY4, btnW, btnH, "Select MAC (Live Scan)", false);
+        Theme::drawButton(t, btnX, btnY5, btnW, btnH, "[ CLOSE ]", false);
     }
 
-    int btnW = (w - 18) / 2;
-    int btnH = 24;
-    int btnY = h - btnH - 6;
-    int leftBtnX = 6;
-    int rightBtnX = leftBtnX + btnW + 6;
+    void drawScanList(TFT_eSPI& t) {
+        const int w = t.width(), h = t.height();
+        t.fillRect(0, 0, w, h, Theme::BG);
+        Theme::drawListHeading(t, "SELECT TARGET NETWORK MAC", Theme::AMBER);
 
-    Theme::drawButton(t, leftBtnX, btnY, btnW, btnH, "[ BACK ]", false);
-    Theme::drawButton(t, rightBtnX, btnY, btnW, btnH, "[ CONFIRM ]", s_selectedIndex != -1);
+        t.setTextFont(1);
 
-    if (s_scrollOffset > 0) {
-        t.setTextColor(Theme::AMBER, Theme::BG);
-        t.setCursor(w / 2 - 4, 16); t.print("^");
+        for (int i = 0; i < 6; i++) {
+            int itemIndex = s_scrollOffset + i;
+            if (itemIndex >= s_scannedCount) break;
+
+            int y = 24 + i * 22;
+            bool isSelected = (itemIndex == s_selectedIndex);
+
+            if (isSelected) {
+                t.fillRect(0, y, w, 20, Theme::PURPLE);
+            }
+            t.drawFastHLine(0, y + 20, w, isSelected ? Theme::AMBER : Theme::BG);
+            
+            t.setTextColor(isSelected ? Theme::AMBER : Theme::CYAN, isSelected ? Theme::PURPLE : Theme::BG);
+            t.setCursor(6, y + 4);
+            t.print(Emulate::getScannedSsidStr(itemIndex));
+
+            t.setTextColor(isSelected ? Theme::WHITE : Theme::WHITE, isSelected ? Theme::PURPLE : Theme::BG);
+            t.setCursor(w - t.textWidth("00:00:00:00:00:00") - 6, y + 4);
+            t.print(Emulate::getScannedMacStr(itemIndex));
+        }
+
+        int btnW = (w - 18) / 2;
+        int btnH = 24;
+        int btnY = h - btnH - 6;
+        int leftBtnX = 6;
+        int rightBtnX = leftBtnX + btnW + 6;
+
+        Theme::drawButton(t, leftBtnX, btnY, btnW, btnH, "[ BACK ]", false);
+        Theme::drawButton(t, rightBtnX, btnY, btnW, btnH, "[ CONFIRM ]", s_selectedIndex != -1);
+
+        if (s_scrollOffset > 0) {
+            t.setTextColor(Theme::AMBER, Theme::BG);
+            t.setCursor(w / 2 - 4, 16); t.print("^");
+        }
+        if (s_scrollOffset + 6 < s_scannedCount) {
+            t.setTextColor(Theme::AMBER, Theme::BG);
+            t.setCursor(w / 2 - 4, btnY - 12); t.print("v");
+        }
     }
-    if (s_scrollOffset + 6 < s_scannedCount) {
-        t.setTextColor(Theme::AMBER, Theme::BG);
-        t.setCursor(w / 2 - 4, btnY - 12); t.print("v");
-    }
-}
 
-}
+    void drawScanSsidList(TFT_eSPI& t) {
+        const int w = t.width(), h = t.height();
+        t.fillRect(0, 0, w, h, Theme::BG);
+        Theme::drawListHeading(t, "SELECT TARGET NETWORK SSID", Theme::CYAN);
+
+        t.setTextFont(1);
+
+        for (int i = 0; i < 6; i++) {
+            int itemIndex = s_scrollOffset + i;
+            if (itemIndex >= s_scannedCount) break;
+
+            int y = 24 + i * 22;
+            bool isSelected = (itemIndex == s_selectedIndex);
+
+            if (isSelected) {
+                t.fillRect(0, y, w, 20, Theme::PURPLE);
+            }
+            t.drawFastHLine(0, y + 20, w, isSelected ? Theme::AMBER : Theme::BG);
+            
+            t.setTextColor(isSelected ? Theme::AMBER : Theme::WHITE, isSelected ? Theme::PURPLE : Theme::BG);
+            t.setCursor(12, y + 4);
+            t.print(Emulate::getScannedSsidStr(itemIndex));
+        }
+
+        int btnW = (w - 18) / 2;
+        int btnH = 24;
+        int btnY = h - btnH - 6;
+        int leftBtnX = 6;
+        int rightBtnX = leftBtnX + btnW + 6;
+
+        Theme::drawButton(t, leftBtnX, btnY, btnW, btnH, "[ BACK ]", false);
+        Theme::drawButton(t, rightBtnX, btnY, btnW, btnH, "[ CONFIRM ]", s_selectedIndex != -1);
+
+        if (s_scrollOffset > 0) {
+            t.setTextColor(Theme::AMBER, Theme::BG);
+            t.setCursor(w / 2 - 4, 16); t.print("^");
+        }
+        if (s_scrollOffset + 6 < s_scannedCount) {
+            t.setTextColor(Theme::AMBER, Theme::BG);
+            t.setCursor(w / 2 - 4, btnY - 12); t.print("v");
+        }
+    }
+
+} // This correctly closes the internal private namespace wrapper
 
 void uiInit(TFT_eSPI& t) {
     s_screen   = Screen::GRID;
@@ -438,7 +434,6 @@ void uiDraw(TFT_eSPI& t) {
         }
     }
 }
-
 void uiHandleTap(TFT_eSPI& t, int x, int y) {
     const int w = t.width(), h = t.height();
     const Theme::ButtonBarGeom bar = Theme::computeButtonBar(w, h);
@@ -694,12 +689,12 @@ void uiHandleTap(TFT_eSPI& t, int x, int y) {
                 Emulate::stop();
             } else {
                 if (checkType == DeviceType::AIRTAG) {
-                    pinMode(22, INPUT_PULLDOWN);
+                    pinMode(AIRTAG_NRF_CS_PIN, INPUT_PULLDOWN);
                     delayMicroseconds(50);
-                    int hardwareDetection = digitalRead(22);
+                    int hardwareDetection = digitalRead(AIRTAG_NRF_CS_PIN);
                     
-                    pinMode(22, OUTPUT);
-                    digitalWrite(22, HIGH);
+                    pinMode(AIRTAG_NRF_CS_PIN, OUTPUT);
+                    digitalWrite(AIRTAG_NRF_CS_PIN, HIGH);
                     
                     if (hardwareDetection == HIGH) {
                         Emulate::start(checkType);

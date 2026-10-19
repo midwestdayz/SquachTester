@@ -1,25 +1,17 @@
-#define CYD 1
-
 #define CONFIG_BT_NIMBLE_ROLE_CENTRAL_DISABLED 1
 #define CONFIG_BT_NIMBLE_ROLE_PERIPHERAL_DISABLED 1
 #define CONFIG_BT_NIMBLE_MAX_CONNECTIONS 1
 #define CONFIG_BT_NIMBLE_MAX_BONDS 1
 
-#define TFT_BL    21
 #define PWM_FREQ  5000
 
+#include "config.h" // Hook up centralized user settings
 #include <WiFi.h> 
 #include "cyd_includes.h"
 
 #include "theme.h"
 #include "ui.h"
 #include "emulate.h"
-
-#define TOUCH_SCK  25
-#define TOUCH_MOSI 32
-#define TOUCH_MISO 39
-#define TOUCH_CS   33
-#define TOUCH_IRQ  36
 
 TFT_eSPI tft;
 SPIClass touchSpi(VSPI);
@@ -78,13 +70,20 @@ void setup() {
 
     tft.init();
 
-    #ifdef USE_ST7789_BATCH
-    tft.setRotation(1);
-    tft.setSwapBytes(false);
-    tft.invertDisplay(false); 
+    // Dynamically apply orientation rotation configurations from config.h
+    #if defined(FLIP_LANDSCAPE_MODE)
+        tft.setRotation(3);  // 180-flipped landscape layout
+        touch.setRotation(3);
     #else
-    tft.setRotation(1);  
-    tft.invertDisplay(true);
+        tft.setRotation(1);  // Default landscape layout
+        touch.setRotation(1);
+    #endif
+
+    // Automatically resolve color inversion configurations from config.h
+    #if defined(FIX_INVERTED_COLORS)
+        tft.invertDisplay(true);
+    #else
+        tft.invertDisplay(false);
     #endif
     
     tft.fillScreen(TFT_BLACK);
@@ -92,7 +91,6 @@ void setup() {
 
     touchSpi.begin(TOUCH_SCK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
     touch.begin(touchSpi);
-    touch.setRotation(1);
 
     Emulate::begin();
     uiInit(tft);

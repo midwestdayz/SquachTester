@@ -207,6 +207,13 @@ void drawTypeIcon(TFT_eSPI& t, DeviceType type, int cx, int cy, int s) {
             t.fillRect(cx - s + 3, cy + s / 2 + 3, s * 2 - 6, s / 8, SHELL_LO);
         }
         break;
+        case DeviceType::DEAUTH: // Added custom parsing path for your grid matrix cell
+            t.fillCircle(cx, cy, s, ICO_INK);
+            t.drawCircle(cx, cy, s * 5 / 4, ICO_WARN);
+            t.drawCircle(cx, cy, s * 3 / 2, ICO_WARN);
+            t.fillRect(cx - s / 2, cy - 2, s, 4, ICO_LED);
+            t.fillRect(cx - 2, cy - s / 2, 4, s, ICO_LED);
+            break;
         default:
         t.drawCircle(cx, cy, s, ICO_METAL);
         break;

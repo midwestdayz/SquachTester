@@ -7,7 +7,7 @@
 Welcome to **SquachTester**, a multi-protocol simulation, wireless telemetry evaluation, and hardware validation suite designed specifically for the **2.8" Cheap Yellow Display (CYD)** (ESP32-2432S028R). 
 
 This platform allows you to evaluate wireless network frame structures, simulate asset tracking beacons, and cross-verify physical module signaling sequences using an interactive touchscreen control grid.
-* >All code was made in Arduino IDE.
+
 ---
 
 ## 🏗️ Hardware Architecture & Configuration Modes
@@ -28,7 +28,7 @@ Enables valid cryptographic Apple Find My / OpenHaystack beacon testing by linki
   |    Cheap Yellow       |               |    Optional nRF52     |
   |    Display (ESP32)    |               |    Co-Processor       |
   |                       |               |   (Required for AT)   |
-  |  [CS PIN / GPIO 5] ---+---------------> [PIN 12 / TRIGGER]    |
+  |  [CS PIN / GPIO 22] --+---------------> [PIN 12 / TRIGGER]    |
   |                       |               |                       |
   |  [GND] ---------------+---------------+ [GND]                 |
   +-----------------------+               +-----------------------+
@@ -79,7 +79,7 @@ All system configurations are centralized inside a single file: `config.h`. Drop
 // IMPORTANT: The AirTag tracking engine requires external nRF52 hardware 
 // wired to these pins. Without it, the function remains disabled in software.
 #define AIRTAG_NRF_CE_PIN   4        // Chip Enable (CE) Pin
-#define AIRTAG_NRF_CS_PIN   5        // Chip Select (CS / SS) Pin
+#define AIRTAG_NRF_CS_PIN   22       // Chip Select (CS / SS) Pin
 
 // ============================================================================
 // 5. HARDWARE PIN MAPPING (Automated)
