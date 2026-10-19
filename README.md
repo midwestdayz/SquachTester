@@ -113,7 +113,7 @@ All system configurations are centralized inside a single file: `config.h`. Drop
 If you decide to utilize **Mode B** to unlock AirTag verification routines, flash the following firmware to your external nRF52 module board. It monitors physical Pin 12. When it encounters an execution pulse pulled low by the display unit, it activates a cryptographic tracking framework via the Apple Find My / OpenHaystack payload scheme.
 
 ```cpp
-// Set this to match the physical wire connection from your CYD display's AIRTAG_NRF_CS_PIN
+// This should be set to an open unused pin or your selected nRF board.
 const int TRIGGER_INPUT_PIN = 12; 
 
 ```
