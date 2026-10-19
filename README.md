@@ -20,6 +20,7 @@ Runs exclusively on the stock Cheap Yellow Display unit. All Wi-Fi, BLE, and 802
 
 ### 🔌 Mode B: Co-Processor Expanded Mode (Optional Add-on)
 Enables valid cryptographic Apple Find My / OpenHaystack beacon testing by linking an external **nRF52 controller** board (such as an Adafruit Feather nRF52 or Seeed Xiao nRF52) to the CYD module.
+* > ⚠️ **Caution:** - **Designed for the ProMicro NRF52840.** You may have to make some changes to fit your chosen NRF board.
 
 ```text
   +-----------------------+               +-----------------------+
