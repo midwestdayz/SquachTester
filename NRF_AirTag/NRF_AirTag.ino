@@ -7,7 +7,7 @@ const uint8_t openHaystackPublicKey[28] = {
 
 bool isAdvertising = false;
 int lastPinState = -1; 
-
+// This should be set to an open unused pin or your selected nRF board.
 const int TRIGGER_INPUT_PIN = 12; 
 
 void setup() {
