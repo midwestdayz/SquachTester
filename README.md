@@ -7,7 +7,7 @@
 Welcome to **SquachTester**, a multi-protocol simulation, wireless telemetry evaluation, and hardware validation suite designed specifically for the **2.8" Cheap Yellow Display (CYD)** (ESP32-2432S028R). 
 
 This platform allows you to evaluate wireless network frame structures, simulate asset tracking beacons, and cross-verify physical module signaling sequences using an interactive touchscreen control grid.
-** All code was made in Arduino IDE.**
+* >All code was made in Arduino IDE.
 ---
 
 ## 🏗️ Hardware Architecture & Configuration Modes
